@@ -11,7 +11,7 @@
     .tab:hover, .tab.active { background: #555; }
     .section { display: none; padding: 20px; background: white; min-height: 80vh; }
     .section.active { display: block; }
-    input, textarea, button { padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+    input, textarea, button, select { padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
     ul { list-style: none; padding: 0; }
     li { background: #eee; margin: 5px 0; padding: 10px; display: flex; justify-content: space-between; align-items: center; }
     .quote { font-style: italic; font-size: 1.2em; }
@@ -73,9 +73,28 @@
 
   <div class="section" id="tasks">
     <h2>Task Management</h2>
-    <input type="text" id="taskInput" placeholder="Enter a new task">
-    <button onclick="addTask()">Add Task</button>
+    <form id="taskForm" onsubmit="event.preventDefault(); addTask();">
+      <input type="text" id="taskInput" placeholder="Task title" required>
+      <input type="date" id="taskDue" placeholder="Due date">
+      <select id="taskPriority">
+        <option value="low">Low Priority</option>
+        <option value="medium">Medium Priority</option>
+        <option value="high">High Priority</option>
+      </select>
+      <input type="text" id="taskCategory" placeholder="Category">
+      <select id="taskRecurring">
+        <option value="none">One-time</option>
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+      </select>
+      <button type="button" onclick="saveTemplate()">Save as Template</button>
+      <button type="button" onclick="loadTemplate()">Load Template</button>
+      <button type="submit">Add Task</button>
+    </form>
+    <div id="smartSuggestion" style="margin:10px 0; color:#007bff;"></div>
     <ul id="taskList"></ul>
+    <div id="taskStats" style="margin-top:20px;"></div>
   </div>
 
   <div class="section" id="budget">
@@ -116,12 +135,12 @@
       const tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
       const dashTasks = document.getElementById('dashboardTasks');
       dashTasks.innerHTML = '';
-      tasks.slice(0, 3).forEach(task => {
+      tasks.filter(t => !t.completed).sort((a,b) => (a.due||'9999').localeCompare(b.due||'9999')).slice(0, 3).forEach(task => {
         const li = document.createElement('li');
-        li.textContent = task;
+        li.textContent = `${task.title} [${task.priority}] ${task.due ? 'Due: ' + task.due : ''}`;
         dashTasks.appendChild(li);
       });
-      if (tasks.length === 0) {
+      if (tasks.filter(t => !t.completed).length === 0) {
         dashTasks.innerHTML = '<li>No tasks</li>';
       }
       // Budget
@@ -163,22 +182,40 @@
     }
 
     // Task Management
+    function getToday() {
+      const d = new Date();
+      return d.toISOString().slice(0, 10);
+    }
     function loadTasks() {
       const tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
       const list = document.getElementById('taskList');
       list.innerHTML = '';
       tasks.forEach((task, i) => {
-        const li = document.createElement('li');
-        li.innerHTML = `${task} <button onclick="deleteTask(${i})">X</button>`;
+        const completed = task.completed ? '✔️' : '';
+        const due = task.due ? `Due: ${task.due}` : '';
+        const cat = task.category ? `Category: ${task.category}` : '';
+        const rec = task.recurring && task.recurring !== 'none' ? `(${task.recurring})` : '';
+        li = document.createElement('li');
+        li.innerHTML = `<b>${task.title}</b> [${task.priority}] ${due} ${cat} ${rec} ${completed}
+          <span>
+            <button onclick="toggleComplete(${i})">${task.completed ? 'Undo' : 'Done'}</button>
+            <button onclick="deleteTask(${i})">X</button>
+          </span>`;
         list.appendChild(li);
       });
+      updateTaskStats(tasks);
+      showSmartSuggestion(tasks);
     }
     function addTask() {
-      const input = document.getElementById('taskInput');
+      const title = document.getElementById('taskInput').value;
+      const due = document.getElementById('taskDue').value;
+      const priority = document.getElementById('taskPriority').value;
+      const category = document.getElementById('taskCategory').value;
+      const recurring = document.getElementById('taskRecurring').value;
       const tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
-      tasks.push(input.value);
+      tasks.push({ title, due, priority, category, recurring, completed: false, created: getToday(), completedOn: null });
       localStorage.setItem('tasks', JSON.stringify(tasks));
-      input.value = '';
+      document.getElementById('taskForm').reset();
       loadTasks();
       loadDashboard();
     }
@@ -188,6 +225,78 @@
       localStorage.setItem('tasks', JSON.stringify(tasks));
       loadTasks();
       loadDashboard();
+    }
+    function toggleComplete(index) {
+      const tasks = JSON.parse(localStorage.getItem('tasks'));
+      const t = tasks[index];
+      if (!t.completed) {
+        t.completed = true;
+        t.completedOn = getToday();
+        // Recurring: auto-add next occurrence
+        if (t.recurring && t.recurring !== 'none') {
+          let nextDue = new Date(t.due || getToday());
+          if (t.recurring === 'daily') nextDue.setDate(nextDue.getDate() + 1);
+          if (t.recurring === 'weekly') nextDue.setDate(nextDue.getDate() + 7);
+          if (t.recurring === 'monthly') nextDue.setMonth(nextDue.getMonth() + 1);
+          tasks.push({ ...t, due: nextDue.toISOString().slice(0,10), completed: false, created: getToday(), completedOn: null });
+        }
+      } else {
+        t.completed = false;
+        t.completedOn = null;
+      }
+      localStorage.setItem('tasks', JSON.stringify(tasks));
+      loadTasks();
+      loadDashboard();
+    }
+    // Task Templates
+    function saveTemplate() {
+      const title = document.getElementById('taskInput').value;
+      const due = document.getElementById('taskDue').value;
+      const priority = document.getElementById('taskPriority').value;
+      const category = document.getElementById('taskCategory').value;
+      const recurring = document.getElementById('taskRecurring').value;
+      localStorage.setItem('taskTemplate', JSON.stringify({ title, due, priority, category, recurring }));
+      alert('Template saved!');
+    }
+    function loadTemplate() {
+      const t = JSON.parse(localStorage.getItem('taskTemplate') || '{}');
+      if (!t.title) { alert('No template saved.'); return; }
+      document.getElementById('taskInput').value = t.title;
+      document.getElementById('taskDue').value = t.due;
+      document.getElementById('taskPriority').value = t.priority;
+      document.getElementById('taskCategory').value = t.category;
+      document.getElementById('taskRecurring').value = t.recurring;
+    }
+    // Completion Statistics
+    function updateTaskStats(tasks) {
+      const today = getToday();
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      let completedToday = 0, completedWeek = 0, total = tasks.length, completed = 0;
+      tasks.forEach(t => {
+        if (t.completed) completed++;
+        if (t.completedOn === today) completedToday++;
+        if (t.completedOn && new Date(t.completedOn) >= weekAgo) completedWeek++;
+      });
+      document.getElementById('taskStats').innerHTML =
+        `Completed today: ${completedToday} | This week: ${completedWeek} | Total: ${completed}/${total}`;
+    }
+    // Smart Suggestion
+    function showSmartSuggestion(tasks) {
+      // Suggest: which task should be high priority?
+      if (!tasks.length) { document.getElementById('smartSuggestion').textContent = ''; return; }
+      // Find incomplete, soonest due, not high priority
+      const now = getToday();
+      const soonest = tasks.filter(t => !t.completed && t.due).sort((a,b) => a.due.localeCompare(b.due))[0];
+      let suggestion = '';
+      if (soonest && soonest.priority !== 'high' && soonest.due <= now) {
+        suggestion = `Consider setting "${soonest.title}" to High Priority (due soon!)`;
+      } else {
+        // If user often completes tasks late, suggest raising priority
+        const late = tasks.filter(t => t.completed && t.due && t.completedOn > t.due).length;
+        if (late > 2) suggestion = 'Tip: You often complete tasks late. Try setting earlier due dates or higher priorities!';
+      }
+      document.getElementById('smartSuggestion').textContent = suggestion;
     }
 
     // Budget Tracker
