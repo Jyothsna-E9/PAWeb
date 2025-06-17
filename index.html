@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Assistant</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f4f4f4; }
+    .tabs { display: flex; background: #333; color: white; }
+    .tab { padding: 10px 20px; cursor: pointer; flex: 1; text-align: center; }
+    .tab:hover, .tab.active { background: #555; }
+    .section { display: none; padding: 20px; background: white; min-height: 80vh; }
+    .section.active { display: block; }
+    input, textarea, button { padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+    ul { list-style: none; padding: 0; }
+    li { background: #eee; margin: 5px 0; padding: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .quote { font-style: italic; font-size: 1.2em; }
+  </style>
+</head>
+<body>
+  <div class="tabs">
+    <div class="tab active" data-section="tasks">Tasks</div>
+    <div class="tab" data-section="budget">Budget</div>
+    <div class="tab" data-section="notes">Notes</div>
+    <div class="tab" data-section="quote">Quote</div>
+  </div>
+
+  <div class="section active" id="tasks">
+    <h2>Task Management</h2>
+    <input type="text" id="taskInput" placeholder="Enter a new task">
+    <button onclick="addTask()">Add Task</button>
+    <ul id="taskList"></ul>
+  </div>
+
+  <div class="section" id="budget">
+    <h2>Budget Tracker</h2>
+    <input type="text" id="expenseName" placeholder="Expense Name">
+    <input type="number" id="expenseAmount" placeholder="Amount">
+    <button onclick="addExpense()">Add Expense</button>
+    <ul id="expenseList"></ul>
+    <h3>Total: $<span id="total">0</span></h3>
+  </div>
+
+  <div class="section" id="notes">
+    <h2>Notes</h2>
+    <textarea id="noteText" placeholder="Write your note here..."></textarea>
+    <button onclick="addNote()">Save Note</button>
+    <ul id="noteList"></ul>
+  </div>
+
+  <div class="section" id="quote">
+    <h2>Quote of the Day</h2>
+    <p class="quote" id="quoteText">Loading...</p>
+  </div>
+
+  <script>
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.section).classList.add('active');
+      });
+    });
+
+    // Task Management
+    function loadTasks() {
+      const tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+      const list = document.getElementById('taskList');
+      list.innerHTML = '';
+      tasks.forEach((task, i) => {
+        const li = document.createElement('li');
+        li.innerHTML = `${task} <button onclick="deleteTask(${i})">X</button>`;
+        list.appendChild(li);
+      });
+    }
+    function addTask() {
+      const input = document.getElementById('taskInput');
+      const tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+      tasks.push(input.value);
+      localStorage.setItem('tasks', JSON.stringify(tasks));
+      input.value = '';
+      loadTasks();
+    }
+    function deleteTask(index) {
+      const tasks = JSON.parse(localStorage.getItem('tasks'));
+      tasks.splice(index, 1);
+      localStorage.setItem('tasks', JSON.stringify(tasks));
+      loadTasks();
+    }
+
+    // Budget Tracker
+    function loadExpenses() {
+      const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
+      const list = document.getElementById('expenseList');
+      const total = expenses.reduce((acc, exp) => acc + exp.amount, 0);
+      document.getElementById('total').textContent = total.toFixed(2);
+      list.innerHTML = '';
+      expenses.forEach((exp, i) => {
+        const li = document.createElement('li');
+        li.innerHTML = `${exp.name}: $${exp.amount} <button onclick="deleteExpense(${i})">X</button>`;
+        list.appendChild(li);
+      });
+    }
+    function addExpense() {
+      const name = document.getElementById('expenseName').value;
+      const amount = parseFloat(document.getElementById('expenseAmount').value);
+      const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
+      expenses.push({ name, amount });
+      localStorage.setItem('expenses', JSON.stringify(expenses));
+      document.getElementById('expenseName').value = '';
+      document.getElementById('expenseAmount').value = '';
+      loadExpenses();
+    }
+    function deleteExpense(index) {
+      const expenses = JSON.parse(localStorage.getItem('expenses'));
+      expenses.splice(index, 1);
+      localStorage.setItem('expenses', JSON.stringify(expenses));
+      loadExpenses();
+    }
+
+    // Notes
+    function loadNotes() {
+      const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+      const list = document.getElementById('noteList');
+      list.innerHTML = '';
+      notes.forEach((note, i) => {
+        const li = document.createElement('li');
+        li.innerHTML = `${note} <button onclick="deleteNote(${i})">X</button>`;
+        list.appendChild(li);
+      });
+    }
+    function addNote() {
+      const text = document.getElementById('noteText').value;
+      const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+      notes.push(text);
+      localStorage.setItem('notes', JSON.stringify(notes));
+      document.getElementById('noteText').value = '';
+      loadNotes();
+    }
+    function deleteNote(index) {
+      const notes = JSON.parse(localStorage.getItem('notes'));
+      notes.splice(index, 1);
+      localStorage.setItem('notes', JSON.stringify(notes));
+      loadNotes();
+    }
+
+    // Quote of the Day (random from static list)
+    function loadQuote() {
+      const quotes = [
+        "The best time to plant a tree was 20 years ago. The second best time is now.",
+        "Do what you can, with what you have, where you are.",
+        "Success is not how high you have climbed, but how you make a positive difference.",
+        "Believe you can and you're halfway there.",
+        "Don't watch the clock; do what it does. Keep going."
+      ];
+      const index = Math.floor(Math.random() * quotes.length);
+      document.getElementById('quoteText').textContent = quotes[index];
+    }
+
+    // Initialize all
+    loadTasks();
+    loadExpenses();
+    loadNotes();
+    loadQuote();
+  </script>
+</body>
+</html>
