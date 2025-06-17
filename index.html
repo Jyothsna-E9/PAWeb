@@ -15,17 +15,63 @@
     ul { list-style: none; padding: 0; }
     li { background: #eee; margin: 5px 0; padding: 10px; display: flex; justify-content: space-between; align-items: center; }
     .quote { font-style: italic; font-size: 1.2em; }
+    /* Dashboard styles */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .dashboard-card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      padding: 20px;
+      min-height: 180px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .dashboard-card h3 { margin-top: 0; }
+    @media (max-width: 600px) {
+      .dashboard-grid { grid-template-columns: 1fr; }
+      .tabs { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
   <div class="tabs">
-    <div class="tab active" data-section="tasks">Tasks</div>
+    <div class="tab active" data-section="dashboard">Dashboard</div>
+    <div class="tab" data-section="tasks">Tasks</div>
     <div class="tab" data-section="budget">Budget</div>
     <div class="tab" data-section="notes">Notes</div>
     <div class="tab" data-section="quote">Quote</div>
   </div>
 
-  <div class="section active" id="tasks">
+  <div class="section active" id="dashboard">
+    <h2>Dashboard Overview</h2>
+    <div class="dashboard-grid">
+      <div class="dashboard-card">
+        <h3>Upcoming Tasks</h3>
+        <ul id="dashboardTasks"></ul>
+      </div>
+      <div class="dashboard-card">
+        <h3>Budget Overview</h3>
+        <div>Total: $<span id="dashboardTotal">0</span></div>
+        <ul id="dashboardExpenses"></ul>
+      </div>
+      <div class="dashboard-card">
+        <h3>Recent Notes</h3>
+        <ul id="dashboardNotes"></ul>
+      </div>
+      <div class="dashboard-card">
+        <h3>Daily Recommendation</h3>
+        <p class="quote" id="dashboardQuote">Loading...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" id="tasks">
     <h2>Task Management</h2>
     <input type="text" id="taskInput" placeholder="Enter a new task">
     <button onclick="addTask()">Add Task</button>
@@ -64,6 +110,58 @@
       });
     });
 
+    // Dashboard population
+    function loadDashboard() {
+      // Tasks
+      const tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+      const dashTasks = document.getElementById('dashboardTasks');
+      dashTasks.innerHTML = '';
+      tasks.slice(0, 3).forEach(task => {
+        const li = document.createElement('li');
+        li.textContent = task;
+        dashTasks.appendChild(li);
+      });
+      if (tasks.length === 0) {
+        dashTasks.innerHTML = '<li>No tasks</li>';
+      }
+      // Budget
+      const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
+      const dashTotal = expenses.reduce((acc, exp) => acc + exp.amount, 0);
+      document.getElementById('dashboardTotal').textContent = dashTotal.toFixed(2);
+      const dashExpenses = document.getElementById('dashboardExpenses');
+      dashExpenses.innerHTML = '';
+      expenses.slice(-2).reverse().forEach(exp => {
+        const li = document.createElement('li');
+        li.textContent = `${exp.name}: $${exp.amount}`;
+        dashExpenses.appendChild(li);
+      });
+      if (expenses.length === 0) {
+        dashExpenses.innerHTML = '<li>No expenses</li>';
+      }
+      // Notes
+      const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+      const dashNotes = document.getElementById('dashboardNotes');
+      dashNotes.innerHTML = '';
+      notes.slice(-2).reverse().forEach(note => {
+        const li = document.createElement('li');
+        li.textContent = note;
+        dashNotes.appendChild(li);
+      });
+      if (notes.length === 0) {
+        dashNotes.innerHTML = '<li>No notes</li>';
+      }
+      // Quote
+      const quotes = [
+        "The best time to plant a tree was 20 years ago. The second best time is now.",
+        "Do what you can, with what you have, where you are.",
+        "Success is not how high you have climbed, but how you make a positive difference.",
+        "Believe you can and you're halfway there.",
+        "Don't watch the clock; do what it does. Keep going."
+      ];
+      const index = Math.floor(Math.random() * quotes.length);
+      document.getElementById('dashboardQuote').textContent = quotes[index];
+    }
+
     // Task Management
     function loadTasks() {
       const tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
@@ -82,12 +180,14 @@
       localStorage.setItem('tasks', JSON.stringify(tasks));
       input.value = '';
       loadTasks();
+      loadDashboard();
     }
     function deleteTask(index) {
       const tasks = JSON.parse(localStorage.getItem('tasks'));
       tasks.splice(index, 1);
       localStorage.setItem('tasks', JSON.stringify(tasks));
       loadTasks();
+      loadDashboard();
     }
 
     // Budget Tracker
@@ -112,12 +212,14 @@
       document.getElementById('expenseName').value = '';
       document.getElementById('expenseAmount').value = '';
       loadExpenses();
+      loadDashboard();
     }
     function deleteExpense(index) {
       const expenses = JSON.parse(localStorage.getItem('expenses'));
       expenses.splice(index, 1);
       localStorage.setItem('expenses', JSON.stringify(expenses));
       loadExpenses();
+      loadDashboard();
     }
 
     // Notes
@@ -138,12 +240,14 @@
       localStorage.setItem('notes', JSON.stringify(notes));
       document.getElementById('noteText').value = '';
       loadNotes();
+      loadDashboard();
     }
     function deleteNote(index) {
       const notes = JSON.parse(localStorage.getItem('notes'));
       notes.splice(index, 1);
       localStorage.setItem('notes', JSON.stringify(notes));
       loadNotes();
+      loadDashboard();
     }
 
     // Quote of the Day (random from static list)
@@ -164,6 +268,7 @@
     loadExpenses();
     loadNotes();
     loadQuote();
+    loadDashboard();
   </script>
 </body>
 </html>
