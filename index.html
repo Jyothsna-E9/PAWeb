@@ -99,9 +99,22 @@
 
   <div class="section" id="budget">
     <h2>Budget Tracker</h2>
-    <input type="text" id="expenseName" placeholder="Expense Name">
-    <input type="number" id="expenseAmount" placeholder="Amount">
-    <button onclick="addExpense()">Add Expense</button>
+    <form id="budgetForm" onsubmit="event.preventDefault(); addBudgetEntry();">
+      <select id="entryType">
+        <option value="expense">Expense</option>
+        <option value="income">Income</option>
+      </select>
+      <input type="text" id="entryName" placeholder="Name" required>
+      <input type="number" id="entryAmount" placeholder="Amount" required>
+      <input type="text" id="entryCategory" placeholder="Category">
+      <button type="submit">Add Entry</button>
+    </form>
+    <div style="margin:10px 0;">
+      <label>Monthly Budget Goal: $<input type="number" id="budgetGoal" style="width:100px;display:inline;" onchange="saveBudgetGoal()"></label>
+    </div>
+    <canvas id="budgetChart" width="400" height="180" style="background:#fafafa; margin-bottom:20px;"></canvas>
+    <div id="spendingInsights" style="margin-bottom:10px;"></div>
+    <div id="spendingRecommendation" style="color:#007bff;"></div>
     <ul id="expenseList"></ul>
     <h3>Total: $<span id="total">0</span></h3>
   </div>
@@ -301,34 +314,109 @@
 
     // Budget Tracker
     function loadExpenses() {
-      const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
+      const entries = JSON.parse(localStorage.getItem('expenses') || '[]');
       const list = document.getElementById('expenseList');
-      const total = expenses.reduce((acc, exp) => acc + exp.amount, 0);
-      document.getElementById('total').textContent = total.toFixed(2);
+      let total = 0, income = 0, expense = 0;
       list.innerHTML = '';
-      expenses.forEach((exp, i) => {
+      entries.forEach((e, i) => {
+        if (e.type === 'income') income += e.amount;
+        else expense += e.amount;
+        const sign = e.type === 'income' ? '+' : '-';
         const li = document.createElement('li');
-        li.innerHTML = `${exp.name}: $${exp.amount} <button onclick="deleteExpense(${i})">X</button>`;
+        li.innerHTML = `${sign}$${e.amount} <b>${e.name}</b> [${e.category || 'Uncategorized'}] (${e.type}) <button onclick="deleteExpense(${i})">X</button>`;
         list.appendChild(li);
       });
+      total = income - expense;
+      document.getElementById('total').textContent = total.toFixed(2);
+      drawBudgetChart(entries);
+      showSpendingInsights(entries, income, expense);
+      showSpendingRecommendation(entries, income, expense);
+      loadBudgetGoal();
     }
-    function addExpense() {
-      const name = document.getElementById('expenseName').value;
-      const amount = parseFloat(document.getElementById('expenseAmount').value);
-      const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
-      expenses.push({ name, amount });
-      localStorage.setItem('expenses', JSON.stringify(expenses));
-      document.getElementById('expenseName').value = '';
-      document.getElementById('expenseAmount').value = '';
+    function addBudgetEntry() {
+      const type = document.getElementById('entryType').value;
+      const name = document.getElementById('entryName').value;
+      const amount = parseFloat(document.getElementById('entryAmount').value);
+      const category = document.getElementById('entryCategory').value;
+      const entries = JSON.parse(localStorage.getItem('expenses') || '[]');
+      entries.push({ type, name, amount, category, date: new Date().toISOString().slice(0,10) });
+      localStorage.setItem('expenses', JSON.stringify(entries));
+      document.getElementById('budgetForm').reset();
       loadExpenses();
       loadDashboard();
     }
     function deleteExpense(index) {
-      const expenses = JSON.parse(localStorage.getItem('expenses'));
-      expenses.splice(index, 1);
-      localStorage.setItem('expenses', JSON.stringify(expenses));
+      const entries = JSON.parse(localStorage.getItem('expenses'));
+      entries.splice(index, 1);
+      localStorage.setItem('expenses', JSON.stringify(entries));
       loadExpenses();
       loadDashboard();
+    }
+    // Budget Goal
+    function saveBudgetGoal() {
+      const goal = parseFloat(document.getElementById('budgetGoal').value);
+      localStorage.setItem('budgetGoal', goal);
+      loadExpenses();
+    }
+    function loadBudgetGoal() {
+      const goal = localStorage.getItem('budgetGoal') || '';
+      document.getElementById('budgetGoal').value = goal;
+    }
+    // Chart
+    function drawBudgetChart(entries) {
+      const ctx = document.getElementById('budgetChart').getContext('2d');
+      ctx.clearRect(0,0,400,180);
+      // Bar chart: income vs expense, and top 3 categories
+      let income = 0, expense = 0, cats = {};
+      entries.forEach(e => {
+        if (e.type === 'income') income += e.amount;
+        else expense += e.amount;
+        if (!cats[e.category]) cats[e.category] = 0;
+        cats[e.category] += e.type === 'income' ? 0 : e.amount;
+      });
+      // Draw bars
+      ctx.fillStyle = '#4caf50'; ctx.fillRect(30, 150-income/5, 40, income/5);
+      ctx.fillStyle = '#f44336'; ctx.fillRect(100, 150-expense/5, 40, expense/5);
+      ctx.fillStyle = '#333'; ctx.fillText('Income', 30, 170);
+      ctx.fillText('Expense', 100, 170);
+      // Top 3 categories
+      const sortedCats = Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,3);
+      sortedCats.forEach((c, i) => {
+        ctx.fillStyle = '#2196f3';
+        ctx.fillRect(200+i*60, 150-c[1]/5, 40, c[1]/5);
+        ctx.fillStyle = '#333';
+        ctx.fillText(c[0]||'Other', 200+i*60, 170);
+      });
+    }
+    // Insights
+    function showSpendingInsights(entries, income, expense) {
+      const goal = parseFloat(localStorage.getItem('budgetGoal')||0);
+      let msg = '';
+      if (goal) {
+        msg += `Goal: $${goal} | `;
+        msg += `Spent: $${expense} | Remaining: $${(goal-expense).toFixed(2)}`;
+      }
+      // Top category
+      const cats = {};
+      entries.forEach(e => { if (e.type==='expense') cats[e.category] = (cats[e.category]||0)+e.amount; });
+      const topCat = Object.entries(cats).sort((a,b)=>b[1]-a[1])[0];
+      if (topCat) msg += ` | Top spending: ${topCat[0]} ($${topCat[1]})`;
+      document.getElementById('spendingInsights').textContent = msg;
+    }
+    // Recommendation
+    function showSpendingRecommendation(entries, income, expense) {
+      const goal = parseFloat(localStorage.getItem('budgetGoal')||0);
+      let rec = '';
+      if (goal && expense > goal) rec = 'You are over budget! Consider reducing spending next month.';
+      else if (goal && expense > goal*0.9) rec = 'Warning: You are close to your budget limit.';
+      else {
+        // Suggest category to cut
+        const cats = {};
+        entries.forEach(e => { if (e.type==='expense') cats[e.category] = (cats[e.category]||0)+e.amount; });
+        const topCat = Object.entries(cats).sort((a,b)=>b[1]-a[1])[0];
+        if (topCat && topCat[1] > expense*0.5) rec = `Consider reducing spending in ${topCat[0]}.`;
+      }
+      document.getElementById('spendingRecommendation').textContent = rec;
     }
 
     // Notes
@@ -378,6 +466,9 @@
     loadNotes();
     loadQuote();
     loadDashboard();
+    drawBudgetChart();
+    showSpendingInsights();
+    showSpendingRecommendation();
   </script>
 </body>
 </html>
