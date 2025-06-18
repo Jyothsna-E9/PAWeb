@@ -70,6 +70,12 @@
         <h3>Daily Recommendation</h3>
         <p class="quote" id="dashboardQuote">Loading...</p>
       </div>
+      <div class="dashboard-card">
+        <h3>Achievements & Streaks</h3>
+        <div id="streakCounter"></div>
+        <div id="pointsLevel"></div>
+        <div id="achievementBadges" style="margin-top:10px;"></div>
+      </div>
     </div>
   </div>
 
@@ -255,6 +261,15 @@
       ];
       const index = Math.floor(Math.random() * quotes.length);
       document.getElementById('dashboardQuote').textContent = quotes[index];
+      // Achievements & Streaks
+      const achievements = JSON.parse(localStorage.getItem('achievements') || '[]');
+      const streaks = JSON.parse(localStorage.getItem('streaks') || '[]');
+      document.getElementById('streakCounter').textContent = `Current Streak: ${streaks.length}`;
+      document.getElementById('pointsLevel').textContent = `Level: ${Math.floor(achievements.length / 5)}`;
+      const badges = achievements.map(a => `<span style="display:inline-block; width:20px; height:20px; background:${a.color}; border-radius:50%; margin-right:5px;"></span>`).join('');
+      document.getElementById('achievementBadges').innerHTML = badges;
+      // Gamification
+      updateGamification(JSON.parse(localStorage.getItem('tasks') || '[]'));
     }
 
     // Task Management
@@ -281,6 +296,7 @@
       });
       updateTaskStats(tasks);
       showSmartSuggestion(tasks);
+      updateGamification(tasks);
     }
     function addTask() {
       const title = document.getElementById('taskInput').value;
@@ -577,6 +593,50 @@
       const index = Math.floor(Math.random() * quotes.length);
       document.getElementById('quoteText').textContent = quotes[index];
     }
+
+    // Gamification: Points, Streaks, Achievements
+    function getGamificationData() {
+      return JSON.parse(localStorage.getItem('gamification') || '{"points":0,"level":1,"streak":0,"lastDay":"","badges":[]}');
+    }
+    function saveGamificationData(data) {
+      localStorage.setItem('gamification', JSON.stringify(data));
+    }
+    function updateGamification(tasks) {
+      const today = getToday();
+      let data = getGamificationData();
+      // Streak: if completed a task today, increment streak
+      const completedToday = tasks.filter(t => t.completedOn === today).length;
+      if (completedToday > 0) {
+        if (data.lastDay === today) {
+          // already counted
+        } else if (data.lastDay && (new Date(today) - new Date(data.lastDay) === 86400000)) {
+          data.streak++;
+          data.lastDay = today;
+        } else if (data.lastDay !== today) {
+          data.streak = 1;
+          data.lastDay = today;
+        }
+        // Points: 10 per completed task
+        data.points += completedToday * 10;
+      }
+      // Level: every 100 points
+      data.level = Math.floor(data.points / 100) + 1;
+      // Achievements
+      const badges = [];
+      if (data.points >= 100) badges.push('💯 100 Points!');
+      if (data.streak >= 3) badges.push('🔥 3-Day Streak!');
+      if (tasks.filter(t => t.completed).length >= 10) badges.push('🏅 10 Tasks Completed!');
+      if (tasks.filter(t => t.completed && t.priority === 'high').length >= 5) badges.push('⭐ 5 High-Priority Tasks!');
+      data.badges = badges;
+      saveGamificationData(data);
+      showGamification(data);
+    }
+    function showGamification(data) {
+      document.getElementById('streakCounter').textContent = `Streak: ${data.streak} day${data.streak!==1?'s':''}`;
+      document.getElementById('pointsLevel').textContent = `Points: ${data.points} | Level: ${data.level}`;
+      document.getElementById('achievementBadges').innerHTML = data.badges.length ? data.badges.map(b=>`<span style='font-size:1.5em;margin-right:8px;'>${b}</span>`).join('') : 'No badges yet.';
+    }
+    // Call in loadTasks and loadDashboard
 
     // Initialize all
     loadTasks();
