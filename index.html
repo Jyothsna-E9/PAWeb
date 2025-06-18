@@ -121,8 +121,16 @@
 
   <div class="section" id="notes">
     <h2>Notes</h2>
-    <textarea id="noteText" placeholder="Write your note here..."></textarea>
-    <button onclick="addNote()">Save Note</button>
+    <form id="noteForm" onsubmit="event.preventDefault(); addNote();">
+      <input type="text" id="noteCategory" placeholder="Category">
+      <input type="text" id="noteTags" placeholder="Tags (comma separated)">
+      <textarea id="noteText" placeholder="Write your note here..." required></textarea>
+      <button type="button" onclick="saveNoteTemplate()">Save as Template</button>
+      <button type="button" onclick="loadNoteTemplate()">Load Template</button>
+      <button type="submit">Save Note</button>
+    </form>
+    <input type="text" id="noteSearch" placeholder="Search notes..." oninput="searchNotes()" style="margin:10px 0;">
+    <div id="relatedNotes" style="margin:10px 0; color:#007bff;"></div>
     <ul id="noteList"></ul>
   </div>
 
@@ -420,22 +428,28 @@
     }
 
     // Notes
-    function loadNotes() {
+    function loadNotes(filtered) {
       const notes = JSON.parse(localStorage.getItem('notes') || '[]');
       const list = document.getElementById('noteList');
       list.innerHTML = '';
-      notes.forEach((note, i) => {
+      (filtered || notes).forEach((note, i) => {
+        const tags = note.tags ? `<span style='color:#888;'>#${note.tags.join(' #')}</span>` : '';
+        const cat = note.category ? `<b>[${note.category}]</b> ` : '';
         const li = document.createElement('li');
-        li.innerHTML = `${note} <button onclick="deleteNote(${i})">X</button>`;
+        li.innerHTML = `${cat}${renderMarkdown(note.text)}<br>${tags}
+          <span><button onclick="deleteNote(${i})">X</button></span>`;
+        li.onclick = () => showRelatedNotes(note, notes);
         list.appendChild(li);
       });
     }
     function addNote() {
       const text = document.getElementById('noteText').value;
+      const category = document.getElementById('noteCategory').value;
+      const tags = document.getElementById('noteTags').value.split(',').map(t=>t.trim()).filter(Boolean);
       const notes = JSON.parse(localStorage.getItem('notes') || '[]');
-      notes.push(text);
+      notes.push({ text, category, tags });
       localStorage.setItem('notes', JSON.stringify(notes));
-      document.getElementById('noteText').value = '';
+      document.getElementById('noteForm').reset();
       loadNotes();
       loadDashboard();
     }
@@ -445,6 +459,55 @@
       localStorage.setItem('notes', JSON.stringify(notes));
       loadNotes();
       loadDashboard();
+    }
+    // Note Templates
+    function saveNoteTemplate() {
+      const text = document.getElementById('noteText').value;
+      const category = document.getElementById('noteCategory').value;
+      const tags = document.getElementById('noteTags').value;
+      localStorage.setItem('noteTemplate', JSON.stringify({ text, category, tags }));
+      alert('Note template saved!');
+    }
+    function loadNoteTemplate() {
+      const t = JSON.parse(localStorage.getItem('noteTemplate') || '{}');
+      if (!t.text) { alert('No template saved.'); return; }
+      document.getElementById('noteText').value = t.text;
+      document.getElementById('noteCategory').value = t.category;
+      document.getElementById('noteTags').value = t.tags;
+    }
+    // Search
+    function searchNotes() {
+      const q = document.getElementById('noteSearch').value.toLowerCase();
+      const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+      if (!q) { loadNotes(); return; }
+      const filtered = notes.filter(n =>
+        n.text.toLowerCase().includes(q) ||
+        (n.category && n.category.toLowerCase().includes(q)) ||
+        (n.tags && n.tags.some(tag => tag.toLowerCase().includes(q)))
+      );
+      loadNotes(filtered);
+    }
+    // Markdown (basic)
+    function renderMarkdown(text) {
+      return text
+        .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+        .replace(/\*(.*?)\*/g, '<i>$1</i>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\n/g, '<br>');
+    }
+    // Related Notes
+    function showRelatedNotes(note, notes) {
+      if (!note) { document.getElementById('relatedNotes').textContent = ''; return; }
+      const related = notes.filter(n => n !== note && (
+        (note.category && n.category === note.category) ||
+        (note.tags && n.tags && n.tags.some(tag => note.tags.includes(tag)))
+      ));
+      if (related.length) {
+        document.getElementById('relatedNotes').innerHTML = 'Related notes:<ul>' +
+          related.map(n => `<li>${renderMarkdown(n.text)}</li>`).join('') + '</ul>';
+      } else {
+        document.getElementById('relatedNotes').textContent = 'No related notes.';
+      }
     }
 
     // Quote of the Day (random from static list)
